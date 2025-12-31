@@ -4,15 +4,6 @@ This is a lightweight habit tracker I built for myself using JavaScript in the i
 
 The idea is to treat habits like a daily battery. Each habit is either charged or not for the day. Instead of chasing perfect streaks, the focus is on consistency and managing energy realistically.
 
-Simple markdown (auto-sized)
-![Widget screenshot](images/IMG_2459.jpeg)
-
-Use HTML to control display size
-<img src="images/IMG_2459.jpeg" alt="Widget screenshot" width="420">
-
-Raw file link (fixed to this commit)
-![Widget screenshot - raw](https://raw.githubusercontent.com/Drac-ux/Minimalist-Scriptable-Habit-tracker-/87209bff9c118054186094aace850905c84063b7/images/IMG_2459.jpeg)
-
 Why I Built It
 
 Most habit trackers felt either too busy or too motivating in a way that didn’t last. I wanted something quiet, honest, and frictionless—something I could glance at and immediately know what I still needed to do.
