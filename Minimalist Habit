@@ -1,1 +1,307 @@
+// ======================================
+// Battery Habit Tracker
+// ======================================
+
+const STORE_FILE = "battery_store.json";
+const MAX_HABITS = 15;
+
+// ---------- File ----------
+const fm = FileManager.local();
+const STORE_PATH = fm.joinPath(fm.documentsDirectory(), STORE_FILE);
+
+// ---------- Date ----------
+function dayKey(date = new Date()) {
+const d = new Date(date);
+d.setHours(0, 1, 0, 0);
+return d.toISOString().slice(0, 10);
+}
+
+function daysLeftInMonth() {
+const now = new Date();
+const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+return end.getDate() - now.getDate();
+}
+
+const TODAY = dayKey();
+
+// ---------- Default ----------
+const DEFAULT_STORE = {
+habits: [
+{ name: "Bed", symbol: "🛏" },
+{ name: "Stretch", symbol: "🧘" },
+{ name: "French", symbol: "🇫🇷" },
+{ name: "Physics", symbol: "⚛︎" },
+{ name: "Adv Functions", symbol: "log" },
+{ name: "Chemistry", symbol: "🧪" },
+{ name: "Biology", symbol: "🧬" },
+{ name: "Calculus", symbol: "lim" },
+{ name: "Coding", symbol: "⌘" },
+{ name: "Read", symbol: "📖" }
+],
+days: {}
+};
+
+// ---------- Load ----------
+let store;
+try {
+store = fm.fileExists(STORE_PATH)
+? JSON.parse(fm.readString(STORE_PATH))
+: DEFAULT_STORE;
+} catch {
+store = DEFAULT_STORE;
+}
+
+// ---------- Init Today ----------
+if (!store.days[TODAY]) {
+store.days[TODAY] = Array(store.habits.length).fill(false);
+}
+
+// Normalize all days
+Object.values(store.days).forEach(d => {
+while (d.length < store.habits.length) d.push(false);
+if (d.length > store.habits.length) d.length = store.habits.length;
+});
+
+// ---------- Save ----------
+function save() {
+fm.writeString(STORE_PATH, JSON.stringify(store));
+}
+
+// ---------- Weekly Completion Rate (KEPT) ----------
+function weeklyCompletionRate() {
+const today = new Date();
+const start = new Date(today);
+start.setDate(today.getDate() - today.getDay() + 1);
+
+let done = 0, total = 0;
+
+store.habits.forEach((_, i) => {
+for (let d = 0; d < 7; d++) {
+const day = new Date(start);
+day.setDate(start.getDate() + d);
+const key = dayKey(day);
+if (store.days[key]) {
+total++;
+if (store.days[key][i]) done++;
+}
+}
+});
+
+return total ? done / total : 0;
+}
+
+// ---------- Check-in (LOCKED TO TODAY) ----------
+async function checkIn() {
+const a = new Alert();
+a.title = "Check-in";
+
+store.habits.forEach((h, i) => {
+a.addAction(`${store.days[TODAY][i] ? "✓ " : ""}${h.name}`);
+});
+
+a.addCancelAction("Done");
+const r = await a.presentSheet();
+
+if (r >= 0) {
+store.days[TODAY][r] = !store.days[TODAY][r];
+save();
+await checkIn();
+}
+}
+
+// ---------- Habit Editing ----------
+async function editHabits() {
+const a = new Alert();
+a.title = "Edit Habits";
+a.addAction("Rename");
+a.addAction("Reorder");
+a.addAction("Add");
+a.addAction("Remove");
+a.addCancelAction("Back");
+
+const r = await a.presentSheet();
+if (r === 0) await renameHabit();
+if (r === 1) await moveHabit();
+if (r === 2) await addHabit();
+if (r === 3) await removeHabit();
+}
+
+async function renameHabit() {
+const a = new Alert();
+a.title = "Rename";
+store.habits.forEach(h => a.addAction(h.name));
+a.addCancelAction("Cancel");
+
+const i = await a.presentSheet();
+if (i < 0) return;
+
+const b = new Alert();
+b.title = "Edit";
+b.addTextField(store.habits[i].name);
+b.addTextField(store.habits[i].symbol);
+b.addAction("Save");
+b.addCancelAction("Cancel");
+
+if (await b.presentAlert() === 0) {
+store.habits[i].name = b.textFieldValue(0);
+store.habits[i].symbol = b.textFieldValue(1);
+save();
+}
+}
+
+async function moveHabit() {
+const a = new Alert();
+a.title = "Move";
+store.habits.forEach(h => a.addAction(h.name));
+a.addCancelAction("Cancel");
+
+const from = await a.presentSheet();
+if (from < 0) return;
+
+const b = new Alert();
+b.title = "New Position";
+store.habits.forEach((_, i) => b.addAction(String(i + 1)));
+b.addCancelAction("Cancel");
+
+const to = await b.presentSheet();
+if (to < 0) return;
+
+const h = store.habits.splice(from, 1)[0];
+store.habits.splice(to, 0, h);
+
+Object.values(store.days).forEach(d => {
+const v = d.splice(from, 1)[0];
+d.splice(to, 0, v);
+});
+
+save();
+}
+
+async function addHabit() {
+if (store.habits.length >= MAX_HABITS) return;
+
+const a = new Alert();
+a.title = "Add Habit";
+a.addTextField("Name");
+a.addTextField("Symbol");
+a.addAction("Add");
+a.addCancelAction("Cancel");
+
+if (await a.presentAlert() === 0) {
+store.habits.push({
+name: a.textFieldValue(0),
+symbol: a.textFieldValue(1)
+});
+Object.values(store.days).forEach(d => d.push(false));
+save();
+}
+}
+
+async function removeHabit() {
+const a = new Alert();
+a.title = "Remove";
+store.habits.forEach(h => a.addAction(h.name));
+a.addCancelAction("Cancel");
+
+const i = await a.presentSheet();
+if (i < 0) return;
+
+store.habits.splice(i, 1);
+Object.values(store.days).forEach(d => d.splice(i, 1));
+save();
+}
+
+// ---------- Monthly Clipboard ----------
+async function exportMonth() {
+const now = new Date();
+const year = now.getFullYear();
+const month = now.getMonth();
+const end = new Date(year, month + 1, 0);
+
+let text = "";
+
+store.habits.forEach((h, i) => {
+let count = 0;
+for (let d = 1; d <= end.getDate(); d++) {
+if (store.days[dayKey(new Date(year, month, d))]?.[i]) count++;
+}
+text += `${h.name} (${count})\n`;
+});
+
+Pasteboard.copy(text.trim());
+}
+
+// ---------- Widget ----------
+function widget() {
+const w = new ListWidget();
+w.backgroundColor = new Color("#0b0b0b");
+w.setPadding(12, 12, 12, 12);
+
+// Emoji header
+const top = w.addStack();
+top.addSpacer();
+
+const next = store.days[TODAY].indexOf(false);
+const symbol = next === -1 ? "✓" : store.habits[next].symbol;
+
+const s = top.addText(symbol);
+s.font = Font.systemFont(10);
+s.textColor = Color.gray();
+s.opacity = next === -1 ? 0.35 : 1;
+
+w.addSpacer(4);
+
+// Weekly indicator dot
+if (weeklyCompletionRate() >= 0.8) {
+const dotRow = w.addStack();
+dotRow.addSpacer();
+const dot = dotRow.addText("•");
+dot.font = Font.systemFont(8);
+dot.textColor = Color.gray();
+w.addSpacer(4);
+}
+
+// Battery grid
+let i = 0;
+while (i < store.habits.length) {
+const wrap = w.addStack();
+wrap.addSpacer();
+
+const row = wrap.addStack();
+for (let j = 0; j < 5 && i < store.habits.length; j++, i++) {
+const t = row.addText(store.days[TODAY][i] ? "▮" : "▯");
+t.font = Font.systemFont(15);
+t.textColor = store.days[TODAY][i] ? Color.white() : Color.gray();
+row.addSpacer(2);
+}
+
+wrap.addSpacer();
+w.addSpacer(4);
+}
+
+w.refreshAfterDate = new Date(Date.now() + 1000 * 60 * 15);
+w.url = URLScheme.forRunningScript();
+return w;
+}
+
+// ---------- Main ----------
+if (config.runsInWidget) {
+Script.setWidget(widget());
+} else {
+const m = new Alert();
+m.title = "Menu";
+m.addAction("Check-in");
+m.addAction("Edit Habits");
+m.addAction(`Monthly Clipboard (${daysLeftInMonth()} days left)`);
+m.addCancelAction("Exit");
+
+const r = await m.presentSheet();
+if (r === 0) await checkIn();
+if (r === 1) await editHabits();
+if (r === 2) await exportMonth();
+
+Script.setWidget(widget());
+}
+
+save();
 
