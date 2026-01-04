@@ -1,0 +1,183 @@
+// Minimalist Prayer Widget (Offline) Hope you enjoy 
+
+// ---------- CONFIG ----------
+const CONFIG = {
+  location: "Enter Location",
+  lat: 43.6591,
+  lon: -79.3626,
+  method: 2,
+  jamaahOffsets: {
+    FAJR: 15,
+    DHUHR: 10,
+    ASR: 10,
+    MAGHRIB: 5,
+    ISHA: 10
+  }
+};
+// rhe cache hours is rhe refresh rate for prayer
+const CACHE_HOURS = 12;
+const CACHE_FILE = "prayer_times_cache.json";
+
+// ---------- FILE MANAGER ----------
+const fm = FileManager.iCloud();
+const cachePath = fm.joinPath(fm.documentsDirectory(), CACHE_FILE);
+
+// ---------- FETCH ----------
+async function fetchPrayerTimes() {
+  const ts = Math.floor(Date.now() / 1000);
+  const url =
+    `https://api.aladhan.com/v1/timings/${ts}` +
+    `?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}&method=${CONFIG.method}`;
+
+  const req = new Request(url);
+  const res = await req.loadJSON();
+
+  return {
+    fetchedAt: Date.now(),
+    timings: res.data.timings
+  };
+}
+
+// ---------- CACHE HANDLING ----------
+async function getPrayerTimes() {
+  if (fm.fileExists(cachePath)) {
+    try {
+      await fm.downloadFileFromiCloud(cachePath);
+    } catch (_) {}
+
+    const cached = JSON.parse(fm.readString(cachePath));
+    const ageHours =
+      (Date.now() - cached.fetchedAt) / (1000 * 60 * 60);
+
+    if (ageHours < CACHE_HOURS) {
+      return cached.timings;
+    }
+  }
+
+  try {
+    const fresh = await fetchPrayerTimes();
+    fm.writeString(cachePath, JSON.stringify(fresh));
+    return fresh.timings;
+  } catch (e) {
+    if (fm.fileExists(cachePath)) {
+      return JSON.parse(fm.readString(cachePath)).timings;
+    }
+    throw e;
+  }
+}
+
+// ---------- TIME HELPERS ----------
+function parseTime(t) {
+  const [h, m] = t.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+function addMinutes(d, m) {
+  return new Date(d.getTime() + m * 60000);
+}
+
+function fmt(d) {
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+// ---------- NEXT PRAYER LOGIC ----------
+function findNextPrayer(prayerTimes) {
+  const now = new Date();
+
+  for (const p of prayerTimes) {
+    if (p.jamaah > now) return p.key;
+  }
+  return prayerTimes[0].key; // after Isha → Fajr
+}
+
+// ---------- WIDGET ----------
+async function createWidget() {
+  const timings = await getPrayerTimes();
+
+  const prayerList = [
+    { label: "Fajr", key: "FAJR" },
+    { label: "Dhuhr", key: "DHUHR" },
+    { label: "Asr", key: "ASR" },
+    { label: "Maghrib", key: "MAGHRIB" },
+    { label: "Isha", key: "ISHA" }
+  ];
+
+  const prayerTimes = prayerList.map(p => {
+    const adhan = parseTime(timings[p.label]);
+    const jamaah = addMinutes(
+      adhan,
+      CONFIG.jamaahOffsets[p.key] || 0
+    );
+    return { ...p, adhan, jamaah };
+  });
+
+  const nextKey = findNextPrayer(prayerTimes);
+
+  const w = new ListWidget();
+  w.backgroundColor = Color.black();
+  w.setPadding(14, 14, 14, 14);
+
+  // Header
+  const title = w.addText("☾  " + CONFIG.location);
+  title.font = Font.semiboldSystemFont(14);
+  title.textColor = Color.white();
+
+  w.addSpacer(6);
+
+  const date = w.addText(
+    new Date().toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric"
+    })
+  );
+  date.font = Font.systemFont(11);
+  date.textColor = new Color("#9ca3af");
+
+  w.addSpacer(10);
+
+  // Prayer rows
+  for (const p of prayerTimes) {
+    const isNext = p.key === nextKey;
+
+    const row = w.addStack();
+    row.layoutHorizontally();
+
+    const name = row.addText(p.label);
+    name.font = isNext
+      ? Font.semiboldSystemFont(12)
+      : Font.systemFont(12);
+    name.textColor = isNext
+      ? new Color("#fbbf24")
+      : Color.white();
+
+    row.addSpacer();
+
+    const times = row.addText(
+      `${fmt(p.adhan)}  ·  ${fmt(p.jamaah)}`
+    );
+    times.font = Font.systemFont(12);
+    times.textColor = isNext
+      ? new Color("#fde68a")
+      : new Color("#6b7280");
+
+    w.addSpacer(5);
+  }
+
+  return w;
+}
+
+// ---------- RUN ----------
+const widget = await createWidget();
+
+if (config.runsInWidget) {
+  Script.setWidget(widget);
+} else {
+  await widget.presentMedium();
+
+describe this code to put on github
