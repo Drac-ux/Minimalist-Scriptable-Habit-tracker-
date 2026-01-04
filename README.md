@@ -34,3 +34,7 @@ Written in JavaScript using Scriptable ( Only can be used in Scriptable... atlea
 Data is stored locally in JSON for privacy and reliability
 
 Uses normalized date keys to avoid time-related bugs
+
+Bonus (if your a muslim)
+
+A lightweight, offline-first iOS widget built with Scriptable that displays daily prayer and jamaʿah times for any mosques ( Just change the variables and it'll just estimate), it uses cached AlAdhan API data to minimize network usage, highlights the next upcoming prayer, and presents everything in a clean, distraction-free dark UI.
